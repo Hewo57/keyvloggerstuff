@@ -7,6 +7,8 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // Serve static files from "public" folder
+const path = require("path");
+console.log("Serving static files from:", path.join(__dirname, "public"));
 app.use(express.static("public"));
 
 // Default route → load index.html
@@ -32,5 +34,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
