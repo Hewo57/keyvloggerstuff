@@ -1,3 +1,4 @@
+ HEAD
 {
   "name": "keyvlogger-chat",
   "version": "1.0.0",
@@ -11,3 +12,18 @@
     "socket.io": "^4.7.2"
   }
 }
+
+{
+  "name": "keyvlogger-chat",
+  "version": "1.0.0",
+  "description": "A simple chat app with Express and Socket.IO",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}
+ b6f4f16cc003bfb611d73ad582e5282e4ea8babf
