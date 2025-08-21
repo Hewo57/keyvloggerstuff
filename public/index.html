@@ -1,149 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keyvlogger - Developer Community</title>
-  <style>
-    body { font-family: Arial, sans-serif; background-color: #f0f4f8; margin: 0; padding: 0; }
-    header { background-color: #00a1d6; color: #fff; padding: 20px 0; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    header h1 { margin: 0; font-size: 2.5em; }
-    .container { padding: 20px; max-width: 900px; margin: 20px auto; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    .chat-box { border: 1px solid #ccc; padding: 15px; background-color: #e6f7ff; height: 400px; overflow-y: scroll; border-radius: 8px; margin-bottom: 10px; }
-    .chat-box div { padding: 10px; border-radius: 8px; margin-bottom: 10px; }
-    .chat-box div:nth-child(odd) { background-color: #bae7ff; }
-    .chat-box div:nth-child(even) { background-color: #91d5ff; }
-    .username { font-weight: bold; }
-    .chat-input { width: calc(100% - 80px); padding: 15px; margin-top: 15px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; display: inline-block; }
-    .chat-input-btn { width: 60px; padding: 15px; margin-top: 15px; border: none; background-color: #00a1d6; color: #fff; border-radius: 8px; font-size: 1em; cursor: pointer; display: inline-block; }
-    .article-form { margin-top: 20px; border: 1px solid #ccc; padding: 15px; border-radius: 8px; }
-    .article-form textarea, .article-form input[type="text"] { width: calc(100% - 30px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; }
-    .article-form button { padding: 10px 20px; background-color: #00a1d6; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
-    footer { text-align: center; padding: 15px; background-color: #00a1d6; color: #fff; position: fixed; width: 100%; bottom: 0; box-shadow: 0 -4px 8px rgba(0,0,0,0.1); }
-  </style>
+<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>Rekkit 🔥</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>Keyvlogger - Developer Community</h1>
+  <header class="app-header">
+    <h1>Rekkit 🔥</h1>
   </header>
-  <div class="container" id="mainContainer">
-    <div class="login-container" id="loginContainer">
-      <input type="text" id="usernameInput" placeholder="Enter your username">
-      <button id="loginButton">Create Account</button>
-    </div>
-    <div class="chat-container" id="chatContainer" style="display: none;">
-      <div class="chat-box" id="chatBox"></div>
-      <div>
-        <input type="text" class="chat-input" id="chatInput" placeholder="Type your message here...">
-        <button class="chat-input-btn" id="sendMessageBtn">Send</button>
-      </div>
-    </div>
-    <div class="article-container" id="articleContainer" style="display: none;">
-      <h2>Share an Article</h2>
-      <div class="article-form">
-        <input type="text" id="articleTitle" placeholder="Article Title">
-        <textarea id="articleContent" rows="5" placeholder="Write your article..."></textarea>
-        <input type="file" id="imageInput" accept="image/*">
-        <button id="postArticleBtn">Post Article</button>
-      </div>
-    </div>
-  </div>
-  <footer>
-    <p>&copy; 2024 Keyvlogger. All rights reserved.</p>
-  </footer>
 
-  <!-- ✅ Only one Socket.IO script -->
+  <!-- AUTH -->
+  <section id="auth" class="center card">
+    <h2>Login / Signup</h2>
+    <input id="username" placeholder="Username" />
+    <input id="password" type="password" placeholder="Password" />
+    <div class="row">
+      <button id="btnSignup">Signup</button>
+      <button id="btnLogin">Login</button>
+    </div>
+    <p id="authMsg" class="muted"></p>
+  </section>
+
+  <!-- APP -->
+  <main id="app" class="app" style="display:none;">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="me">
+        <span id="meName"></span>
+        <button id="logout">Logout</button>
+      </div>
+
+      <div class="section">
+        <h3>Direct Messages</h3>
+        <ul id="dmList" class="list"></ul>
+      </div>
+
+      <div class="section">
+        <h3>Groups</h3>
+        <ul id="groupList" class="list"></ul>
+        <div class="row create">
+          <input id="newGroup" placeholder="New group name" />
+          <button id="createGroup">Create</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Chat pane -->
+    <section class="chat">
+      <div class="chat-header">
+        <h2 id="chatTitle">Pick a chat</h2>
+      </div>
+
+      <div class="chat-box">
+        <ul id="messages"></ul>
+      </div>
+
+      <form id="form" class="composer">
+        <input id="input" autocomplete="off" placeholder="Type a message..." />
+        <button>Send</button>
+      </form>
+    </section>
+  </main>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
-  window.onload = function() {
-    const chatBox = document.getElementById('chatBox');
-    const chatInput = document.getElementById('chatInput');
-    const loginContainer = document.getElementById('loginContainer');
-    const chatContainer = document.getElementById('chatContainer');
-    const articleContainer = document.getElementById('articleContainer');
-    const usernameInput = document.getElementById('usernameInput');
-    const loginButton = document.getElementById('loginButton');
-    const sendMessageBtn = document.getElementById('sendMessageBtn');
-    const postArticleBtn = document.getElementById('postArticleBtn');
-    const articleTitle = document.getElementById('articleTitle');
-    const articleContent = document.getElementById('articleContent');
-    const imageInput = document.getElementById('imageInput');
-
-    const badWords = ['badword1','badword2','badword3'];
-    let username = '';
-
     const socket = io();
 
-    function censorBadWords(message) {
-      let censored = message;
-      badWords.forEach(word => {
-        const regex = new RegExp(word, 'gi');
-        censored = censored.replace(regex, '****');
+    // UI refs
+    const auth = document.getElementById("auth");
+    const authMsg = document.getElementById("authMsg");
+    const usernameEl = document.getElementById("username");
+    const passwordEl = document.getElementById("password");
+    const btnLogin = document.getElementById("btnLogin");
+    const btnSignup = document.getElementById("btnSignup");
+
+    const app = document.getElementById("app");
+    const meName = document.getElementById("meName");
+    const logout = document.getElementById("logout");
+
+    const dmList = document.getElementById("dmList");
+    const groupList = document.getElementById("groupList");
+    const newGroup = document.getElementById("newGroup");
+    const createGroup = document.getElementById("createGroup");
+
+    const chatTitle = document.getElementById("chatTitle");
+    const messages = document.getElementById("messages");
+    const form = document.getElementById("form");
+    const input = document.getElementById("input");
+
+    let me = null;
+    let current = { kind: null, id: null }; // { kind: 'dm'|'group', id: 'alice'|'general' }
+
+    // --- auth handlers ---
+    btnSignup.onclick = async () => {
+      const r = await fetch("/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
       });
-      return censored;
-    }
+      const res = await r.json();
+      authMsg.textContent = res.success ? "Signup successful! Please log in." : res.error;
+    };
 
-    function addMessageToChat(user, message) {
-      const el = document.createElement('div');
-      el.innerHTML = `<span class="username">${user}:</span> <span class="message">${message}</span>`;
-      chatBox.appendChild(el);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    loginButton.addEventListener('click', () => {
-      username = usernameInput.value.trim();
-      if (username) {
-        loginContainer.style.display = 'none';
-        chatContainer.style.display = 'block';
-        articleContainer.style.display = 'block';
+    btnLogin.onclick = async () => {
+      const r = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
+      });
+      const res = await r.json();
+      if (res.success) {
+        me = res.username;
+        meName.textContent = me;
+        auth.style.display = "none";
+        app.style.display = "grid";
+        await refreshLists();
       } else {
-        alert('Please enter a username.');
+        authMsg.textContent = res.error;
       }
-    });
+    };
 
-    sendMessageBtn.addEventListener('click', () => {
-      sendMessage();
-    });
+    logout.onclick = () => {
+      me = null;
+      current = { kind: null, id: null };
+      messages.innerHTML = "";
+      chatTitle.textContent = "Pick a chat";
+      app.style.display = "none";
+      auth.style.display = "block";
+      usernameEl.value = "";
+      passwordEl.value = "";
+      authMsg.textContent = "";
+    };
 
-    chatInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
+    // --- lists ---
+    async function refreshLists() {
+      const [users, groups] = await Promise.all([
+        fetch("/users").then(r => r.json()),
+        fetch("/groups").then(r => r.json()),
+      ]);
 
-    function sendMessage() {
-      const msg = chatInput.value.trim();
-      if (msg && username) {
-        const cleanMsg = censorBadWords(msg);
-        socket.emit("chat message", { user: username, text: cleanMsg });
-        chatInput.value = '';
-      }
+      dmList.innerHTML = "";
+      users.filter(u => u !== me).forEach(u => {
+        const li = document.createElement("li");
+        li.textContent = u;
+        li.onclick = () => openDM(u);
+        dmList.appendChild(li);
+      });
+
+      groupList.innerHTML = "";
+      groups.forEach(g => {
+        const li = document.createElement("li");
+        li.textContent = g;
+        li.onclick = () => openGroup(g);
+        groupList.appendChild(li);
+      });
     }
 
-    socket.on("chat message", (data) => {
-      addMessageToChat(data.user, data.text);
+    createGroup.onclick = async () => {
+      const name = newGroup.value.trim().toLowerCase();
+      if (!name) return;
+      const r = await fetch("/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name })
+      });
+      const res = await r.json();
+      if (res.success) {
+        newGroup.value = "";
+        refreshLists();
+      } else {
+        alert(res.error);
+      }
+    };
+
+    function openDM(other) {
+      current = { kind: "dm", id: other };
+      chatTitle.textContent = `Chat with ${other}`;
+      messages.innerHTML = "";
+      socket.emit("join dm", { me, other });
+    }
+
+    function openGroup(group) {
+      current = { kind: "group", id: group };
+      chatTitle.textContent = `#${group}`;
+      messages.innerHTML = "";
+      socket.emit("join group", { username: me, group });
+    }
+
+    // --- send / receive ---
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!input.value || !current.kind) return;
+      socket.emit("chat message", {
+        kind: current.kind,
+        to: current.id,
+        from: me,
+        text: input.value
+      });
+      input.value = "";
     });
 
-    postArticleBtn.addEventListener('click', () => {
-      const title = articleTitle.value.trim();
-      const content = articleContent.value.trim();
-      const imgFile = imageInput.files[0];
-      if (title && content && username) {
-        const article = document.createElement('div');
-        article.innerHTML = `
-          <h3>${title}</h3>
-          <p>${content}</p>
-          ${imgFile ? `<img src="${URL.createObjectURL(imgFile)}" alt="Article Image">` : ''}
-          <p>Posted by: ${username}</p>`;
-        document.body.appendChild(article);
-        articleTitle.value = '';
-        articleContent.value = '';
-        imageInput.value = '';
-        alert('Article posted successfully!');
-      } else {
-        alert('Please fill out all fields.');
+    socket.on("chat message", (m) => {
+      // only show if it belongs to the currently open convo
+      if (
+        (m.kind === "group" && current.kind === "group" && m.to === current.id) ||
+        (m.kind === "dm" && current.kind === "dm" &&
+          ((m.from === me && m.to === current.id) || (m.from === current.id && m.to === me)))
+      ) {
+        addMessage(m);
       }
     });
-  };
+
+    function addMessage(m) {
+      const li = document.createElement("li");
+      li.className = m.from === me ? "me" : "other";
+      li.innerHTML = `<strong>${m.from}</strong> ${escapeHtml(m.text)}`;
+      messages.appendChild(li);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
   </script>
 </body>
 </html>
-
