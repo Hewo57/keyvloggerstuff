@@ -4,298 +4,139 @@
 <link rel="stylesheet" href="style.css">
   <meta charset="UTF-8" />
   <title>Rekkit 🔥</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="app-header">
-<div id="adminLink"></div>
+  <header>
     <h1>Rekkit 🔥</h1>
   </header>
 
-  <!-- AUTH -->
-  <section id="auth" class="center card">
+  <!-- LOGIN -->
+  <div id="auth" class="center">
     <h2>Login / Signup</h2>
     <input id="username" placeholder="Username" />
     <input id="password" type="password" placeholder="Password" />
-    <div class="row">
-      <button id="btnSignup">Signup</button>
-      <button id="btnLogin">Login</button>
+    <div>
+      <button onclick="signup()">Signup</button>
+      <button onclick="login()">Login</button>
     </div>
-    <p id="authMsg" class="muted"></p>
-  </section>
+    <p id="authMsg"></p>
+  </div>
 
-  <!-- APP -->
-  <main id="app" class="app" style="display:none;">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="me">
-        <span id="meName"></span>
-        <button id="logout">Logout</button>
-      </div>
+  <!-- CHAT LIST -->
+  <div id="chatList" class="center" style="display:none;">
+    <h2>Select a Chat</h2>
+    <ul id="chats">
+      <!-- Filled dynamically -->
+    </ul>
+    <button onclick="logout()">Logout</button>
+  </div>
 
-      <div class="section">
-        <h3>Direct Messages</h3>
-        <ul id="dmList" class="list"></ul>
-      </div>
-
-      <div class="section">
-        <h3>Groups</h3>
-        <ul id="groupList" class="list"></ul>
-        <div class="row create">
-          <input id="newGroup" placeholder="New group name" />
-          <button id="createGroup">Create</button>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Chat pane -->
-    <section class="chat">
-      <div class="chat-header">
-        <h2 id="chatTitle">Pick a chat</h2>
-      </div>
-
-      <div class="chat-box">
-        <ul id="messages"></ul>
-      </div>
-
-      <form id="form" class="composer">
-        <input id="input" autocomplete="off" placeholder="Type a message..." />
-        <button>Send</button>
-      </form>
-    </section>
-  </main>
+  <!-- CHAT WINDOW -->
+  <div id="chatWindow" class="center" style="display:none;">
+    <h2 id="chatTitle">Chat</h2>
+    <div class="chat-box">
+      <ul id="messages"></ul>
+    </div>
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <button>Send</button>
+    </form>
+    <button onclick="backToList()">⬅ Back</button>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
+    let currentUser = null;
+    let currentChat = null;
 
-    // UI refs
-    const auth = document.getElementById("auth");
-    const authMsg = document.getElementById("authMsg");
-    const usernameEl = document.getElementById("username");
-    const passwordEl = document.getElementById("password");
-    const btnLogin = document.getElementById("btnLogin");
-    const btnSignup = document.getElementById("btnSignup");
+    // AUTH
+    function signup() {
+      fetch("/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.value, password: password.value })
+      }).then(r => r.json()).then(res => {
+        authMsg.innerText = res.success ? "Signup successful! Please login." : res.error;
+      });
+    }
 
-    const app = document.getElementById("app");
-    const meName = document.getElementById("meName");
-    const logout = document.getElementById("logout");
+    function login() {
+      fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.value, password: password.value })
+      }).then(r => r.json()).then(res => {
+        if (res.success) {
+          currentUser = res.username;
+          auth.style.display = "none";
+          chatList.style.display = "block";
+          loadChats();
+        } else {
+          authMsg.innerText = res.error;
+        }
+      });
+    }
 
-    const dmList = document.getElementById("dmList");
-    const groupList = document.getElementById("groupList");
-    const newGroup = document.getElementById("newGroup");
-    const createGroup = document.getElementById("createGroup");
+    function logout() {
+      currentUser = null;
+      chatList.style.display = "none";
+      chatWindow.style.display = "none";
+      auth.style.display = "block";
+    }
 
-    const chatTitle = document.getElementById("chatTitle");
-    const messages = document.getElementById("messages");
+    function loadChats() {
+      // For now hardcoded chats
+      const chats = ["General", "Alice", "Bob"];
+      chatsEl.innerHTML = "";
+      chats.forEach(c => {
+        const li = document.createElement("li");
+        li.innerText = c;
+        li.onclick = () => openChat(c);
+        chatsEl.appendChild(li);
+      });
+    }
+
+    function openChat(chatName) {
+      currentChat = chatName;
+      chatList.style.display = "none";
+      chatWindow.style.display = "block";
+      chatTitle.innerText = "Chat with " + chatName;
+      messages.innerHTML = "";
+      socket.emit("join room", chatName);
+    }
+
+    function backToList() {
+      socket.emit("leave room", currentChat);
+      currentChat = null;
+      chatWindow.style.display = "none";
+      chatList.style.display = "block";
+    }
+
+    // CHAT
     const form = document.getElementById("form");
     const input = document.getElementById("input");
+    const messages = document.getElementById("messages");
+    const chatsEl = document.getElementById("chats");
 
-    let me = null;
-    let current = { kind: null, id: null }; // { kind: 'dm'|'group', id: 'alice'|'general' }
-
-    // --- auth handlers ---
-    btnSignup.onclick = async () => {
-      const r = await fetch("/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      authMsg.textContent = res.success ? "Signup successful! Please log in." : res.error;
-    };
-
-    btnLogin.onclick = async () => {
-      const r = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      if (res.success) {
-        me = res.username;
-        meName.textContent = me;
-        auth.style.display = "none";
-        app.style.display = "grid";
-        await refreshLists();
-      } else {
-        authMsg.textContent = res.error;
-      }
-    };
-
-    logout.onclick = () => {
-      me = null;
-      current = { kind: null, id: null };
-      messages.innerHTML = "";
-      chatTitle.textContent = "Pick a chat";
-      app.style.display = "none";
-      auth.style.display = "block";
-      usernameEl.value = "";
-      passwordEl.value = "";
-      authMsg.textContent = "";
-    };
-
-    // --- lists ---
-    async function refreshLists() {
-      const [users, groups] = await Promise.all([
-        fetch("/users").then(r => r.json()),
-        fetch("/groups").then(r => r.json()),
-      ]);
-
-      dmList.innerHTML = "";
-      users.filter(u => u !== me).forEach(u => {
-        const li = document.createElement("li");
-        li.textContent = u;
-        li.onclick = () => openDM(u);
-        dmList.appendChild(li);
-      });
-
-      groupList.innerHTML = "";
-      groups.forEach(g => {
-        const li = document.createElement("li");
-        li.textContent = g;
-        li.onclick = () => openGroup(g);
-        groupList.appendChild(li);
-      });
-    }
-
-    createGroup.onclick = async () => {
-      const name = newGroup.value.trim().toLowerCase();
-      if (!name) return;
-      const r = await fetch("/groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name })
-      });
-      const res = await r.json();
-      if (res.success) {
-        newGroup.value = "";
-        refreshLists();
-      } else {
-        alert(res.error);
-      }
-    };
-
-    function openDM(other) {
-      current = { kind: "dm", id: other };
-      chatTitle.textContent = `Chat with ${other}`;
-      messages.innerHTML = "";
-      socket.emit("join dm", { me, other });
-    }
-
-    function openGroup(group) {
-      current = { kind: "group", id: group };
-      chatTitle.textContent = `#${group}`;
-      messages.innerHTML = "";
-      socket.emit("join group", { username: me, group });
-    }
-
-    // --- send / receive ---
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", e => {
       e.preventDefault();
-      if (!input.value || !current.kind) return;
-      socket.emit("chat message", {
-        kind: current.kind,
-        to: current.id,
-        from: me,
-        text: input.value
-      });
-      input.value = "";
-    });
-
-    socket.on("chat message", (m) => {
-      // only show if it belongs to the currently open convo
-      if (
-        (m.kind === "group" && current.kind === "group" && m.to === current.id) ||
-        (m.kind === "dm" && current.kind === "dm" &&
-          ((m.from === me && m.to === current.id) || (m.from === current.id && m.to === me)))
-      ) {
-        addMessage(m);
+      if (input.value && currentChat) {
+        socket.emit("chat message", { room: currentChat, msg: input.value, user: currentUser });
+        input.value = "";
       }
     });
 
-    function addMessage(m) {
-      const li = document.createElement("li");
-      li.className = m.from === me ? "me" : "other";
-      li.innerHTML = `<strong>${m.from}</strong> ${escapeHtml(m.text)}`;
-      messages.appendChild(li);
-      messages.scrollTop = messages.scrollHeight;
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
+    socket.on("chat message", data => {
+      if (data.room === currentChat) {
+        const li = document.createElement("li");
+        li.className = (data.user === currentUser) ? "me" : "other";
+        li.innerHTML = `<strong>${data.user}:</strong> ${data.msg}`;
+        messages.appendChild(li);
+        messages.scrollTop = messages.scrollHeight;
+      }
+    });
   </script>
-<script>
-  const gifBtn = document.getElementById("gifBtn");
-  const gifContainer = document.getElementById("gifContainer");
-  const searchGifBtn = document.getElementById("searchGifBtn");
-  const gifResults = document.getElementById("gifResults");
-  const imageBtn = document.getElementById("imageBtn");
-  const imageUpload = document.getElementById("imageUpload");
-
-  // Toggle GIF search box
-  gifBtn.addEventListener("click", () => {
-    gifContainer.style.display = gifContainer.style.display === "none" ? "block" : "none";
-  });
-
-  // Search Giphy
-  searchGifBtn.addEventListener("click", async () => {
-    const query = document.getElementById("gifSearch").value;
-    if (!query) return;
-
-    const apiKey = "dc6zaTOxFJmzC"; // free public beta key
-    const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${query}&limit=10`);
-    const data = await res.json();
-
-    gifResults.innerHTML = "";
-    data.data.forEach(gif => {
-      const img = document.createElement("img");
-      img.src = gif.images.fixed_height_small.url;
-      img.style.cursor = "pointer";
-      img.addEventListener("click", () => {
-        socket.emit("chat message", `<img src="${gif.images.fixed_height.url}" style="max-width:200px;">`);
-        gifContainer.style.display = "none";
-      });
-      gifResults.appendChild(img);
-    });
-  });
-
-  // Image upload button
-  imageBtn.addEventListener("click", () => {
-    imageUpload.click(); // trigger hidden file input
-  });
-
-  // Handle image upload
-  imageUpload.addEventListener("change", () => {
-    const file = imageUpload.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      socket.emit("chat message", `<img src="${reader.result}" style="max-width:200px;">`);
-    };
-    reader.readAsDataURL(file);
-  });
-</script>
-<script>
-  async function checkUser() {
-    try {
-      const res = await fetch("/me");
-      const user = await res.json();
-
-      if (user && user.username === "prabhavdaboi") {
-        document.getElementById("adminLink").innerHTML = `
-          <a href="/admin">🔒 Admin Panel</a>
-        `;
-      }
-    } catch (err) {
-      console.error("Error checking user:", err);
-    }
-  }
-
-  checkUser();
-</script>
 </body>
 </html>

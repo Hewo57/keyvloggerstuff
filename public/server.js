@@ -1,72 +1,92 @@
 const express = require("express");
 const http = require("http");
-const path = require("path");
 const { Server } = require("socket.io");
+const fs = require("fs");
+const bcrypt = require("bcrypt"); // for secure passwords
 const bodyParser = require("body-parser");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.use(express.static("public"));
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public"))); // serve static files from "public"
 
-// Home route (index.html)
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+const USERS_FILE = "users.json";
+const CHATS_FILE = "chats.json";
 
-let bannedUsers = [];
+// ✅ Load or init users
+let users = fs.existsSync(USERS_FILE)
+  ? JSON.parse(fs.readFileSync(USERS_FILE))
+  : {};
+// ✅ Load or init chats
+let chats = fs.existsSync(CHATS_FILE)
+  ? JSON.parse(fs.readFileSync(CHATS_FILE))
+  : {};
 
-// Login route
-app.post("/login", (req, res) => {
-  const { username } = req.body;
-
-  if (username === "prabhavdaboi") {
-    return res.json({ success: true });
+// --- AUTH ENDPOINTS ---
+app.post("/signup", async (req, res) => {
+  const { username, password } = req.body;
+  if (users[username]) {
+    return res.json({ success: false, error: "Username already exists!" });
   }
-
-  if (bannedUsers.includes(username)) {
-    return res.json({ success: false, message: "You are banned!" });
-  }
-
+  const hash = await bcrypt.hash(password, 10);
+  users[username] = { password: hash };
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
   res.json({ success: true });
 });
 
-// Admin panel
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "adminpanel.html"));
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = users[username];
+  if (!user) return res.json({ success: false, error: "User not found" });
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.json({ success: false, error: "Wrong password" });
+
+  res.json({ success: true, username });
 });
 
-// Ban a user
-app.post("/ban", (req, res) => {
-  const { username } = req.body;
+// --- SOCKET.IO CHAT ---
+io.on("connection", (socket) => {
+  console.log("🔗 User connected");
 
-  if (username === "prabhavdaboi") {
-    return res.json({ success: false, message: "You cannot ban the owner!" });
-  }
+  socket.on("join room", (room) => {
+    socket.join(room);
+    console.log(`User joined ${room}`);
 
-  if (!bannedUsers.includes(username)) {
-    bannedUsers.push(username);
-  }
-  res.json({ success: true });
-});
+    // send old messages from file
+    if (chats[room]) {
+      chats[room].forEach((msg) => {
+        socket.emit("chat message", msg);
+      });
+    }
+  });
 
-// Unban a user
-app.post("/unban", (req, res) => {
-  const { username } = req.body;
-  bannedUsers = bannedUsers.filter(u => u !== username);
-  res.json({ success: true });
-});
+  socket.on("leave room", (room) => {
+    socket.leave(room);
+    console.log(`User left ${room}`);
+  });
 
-// Socket.io
-io.on("connection", socket => {
-  socket.on("chat message", msg => {
-    io.emit("chat message", msg);
+  socket.on("chat message", (data) => {
+    // save chat to memory
+    if (!chats[data.room]) chats[data.room] = [];
+    chats[data.room].push(data);
+
+    // write to file
+    fs.writeFileSync(CHATS_FILE, JSON.stringify(chats, null, 2));
+
+    // broadcast
+    io.to(data.room).emit("chat message", data);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("❌ User disconnected");
   });
 });
 
-const PORT = process.env.PORT || 3000;
+// ✅ Use Render’s port
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
