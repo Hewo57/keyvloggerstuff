@@ -12,17 +12,17 @@ app.use(express.json());
 
 let bannedUsers = new Set();
 
-// Serve index.html
+// Root page
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Serve admin panel
+// Admin page
 app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/adminpanel.html"));
+  res.sendFile(path.join(__dirname, "public", "adminpanel.html"));
 });
 
-// API to ban a user
+// API for banning
 app.post("/ban", (req, res) => {
   const { username } = req.body;
   if (username) {
