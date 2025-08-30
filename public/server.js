@@ -9,7 +9,12 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, "public"))); // serve static files from "public"
+
+// Home route (index.html)
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 let bannedUsers = [];
 
@@ -17,7 +22,6 @@ let bannedUsers = [];
 app.post("/login", (req, res) => {
   const { username } = req.body;
 
-  // Protect special username
   if (username === "prabhavdaboi") {
     return res.json({ success: true });
   }
@@ -29,7 +33,7 @@ app.post("/login", (req, res) => {
   res.json({ success: true });
 });
 
-// Admin panel route
+// Admin panel
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "adminpanel.html"));
 });
