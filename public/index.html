@@ -9,6 +9,7 @@
 </head>
 <body>
   <header class="app-header">
+<div id="adminLink"></div>
     <h1>Rekkit 🔥</h1>
   </header>
 
@@ -226,5 +227,75 @@
       return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
   </script>
+<script>
+  const gifBtn = document.getElementById("gifBtn");
+  const gifContainer = document.getElementById("gifContainer");
+  const searchGifBtn = document.getElementById("searchGifBtn");
+  const gifResults = document.getElementById("gifResults");
+  const imageBtn = document.getElementById("imageBtn");
+  const imageUpload = document.getElementById("imageUpload");
+
+  // Toggle GIF search box
+  gifBtn.addEventListener("click", () => {
+    gifContainer.style.display = gifContainer.style.display === "none" ? "block" : "none";
+  });
+
+  // Search Giphy
+  searchGifBtn.addEventListener("click", async () => {
+    const query = document.getElementById("gifSearch").value;
+    if (!query) return;
+
+    const apiKey = "dc6zaTOxFJmzC"; // free public beta key
+    const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${query}&limit=10`);
+    const data = await res.json();
+
+    gifResults.innerHTML = "";
+    data.data.forEach(gif => {
+      const img = document.createElement("img");
+      img.src = gif.images.fixed_height_small.url;
+      img.style.cursor = "pointer";
+      img.addEventListener("click", () => {
+        socket.emit("chat message", `<img src="${gif.images.fixed_height.url}" style="max-width:200px;">`);
+        gifContainer.style.display = "none";
+      });
+      gifResults.appendChild(img);
+    });
+  });
+
+  // Image upload button
+  imageBtn.addEventListener("click", () => {
+    imageUpload.click(); // trigger hidden file input
+  });
+
+  // Handle image upload
+  imageUpload.addEventListener("change", () => {
+    const file = imageUpload.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      socket.emit("chat message", `<img src="${reader.result}" style="max-width:200px;">`);
+    };
+    reader.readAsDataURL(file);
+  });
+</script>
+<script>
+  async function checkUser() {
+    try {
+      const res = await fetch("/me");
+      const user = await res.json();
+
+      if (user && user.username === "prabhavdaboi") {
+        document.getElementById("adminLink").innerHTML = `
+          <a href="/admin">🔒 Admin Panel</a>
+        `;
+      }
+    } catch (err) {
+      console.error("Error checking user:", err);
+    }
+  }
+
+  checkUser();
+</script>
 </body>
 </html>
