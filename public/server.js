@@ -1,56 +1,64 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const path = require("path");
+const { Server } = require("socket.io");
+const bodyParser = require("body-parser");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname)));
 
-let bannedUsers = new Set();
+let bannedUsers = [];
 
-// Root page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// Login route
+app.post("/login", (req, res) => {
+  const { username } = req.body;
+
+  // Protect special username
+  if (username === "prabhavdaboi") {
+    return res.json({ success: true });
+  }
+
+  if (bannedUsers.includes(username)) {
+    return res.json({ success: false, message: "You are banned!" });
+  }
+
+  res.json({ success: true });
 });
 
-// Admin page
+// Admin panel route
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "adminpanel.html"));
 });
 
-// API for banning
+// Ban a user
 app.post("/ban", (req, res) => {
   const { username } = req.body;
-  if (username) {
-    bannedUsers.add(username);
-    res.json({ success: true, message: `${username} has been banned.` });
-  } else {
-    res.json({ success: false, message: "No username provided." });
+
+  if (username === "prabhavdaboi") {
+    return res.json({ success: false, message: "You cannot ban the owner!" });
   }
+
+  if (!bannedUsers.includes(username)) {
+    bannedUsers.push(username);
+  }
+  res.json({ success: true });
 });
 
-io.on("connection", (socket) => {
-  socket.on("setUsername", (username) => {
-    if (bannedUsers.has(username)) {
-      socket.emit("banned");
-      socket.disconnect(true);
-    } else {
-      socket.username = username;
-    }
-  });
+// Unban a user
+app.post("/unban", (req, res) => {
+  const { username } = req.body;
+  bannedUsers = bannedUsers.filter(u => u !== username);
+  res.json({ success: true });
+});
 
-  socket.on("chat message", (msg) => {
-    if (socket.username && !bannedUsers.has(socket.username)) {
-      io.emit("chat message", { user: socket.username, text: msg });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected");
+// Socket.io
+io.on("connection", socket => {
+  socket.on("chat message", msg => {
+    io.emit("chat message", msg);
   });
 });
 
