@@ -62,15 +62,15 @@
         <input id="input" autocomplete="off" placeholder="Type a message..." />
         <button>Send</button>
       </form>
-<div class="video-chat">
+<section id="videoChat" style="display:none; margin-top:20px; text-align:center;">
   <h3>Video Chat</h3>
-  <button id="startCall">Start Call</button>
-  <button id="endCall">End Call</button>
-  <div class="video-container">
-    <video id="localVideo" autoplay muted playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
+  <div style="display:flex; justify-content:center; gap:10px; margin-bottom:10px;">
+    <video id="localVideo" autoplay playsinline muted style="width:200px; border:2px solid orange; border-radius:8px;"></video>
+    <video id="remoteVideo" autoplay playsinline style="width:200px; border:2px solid orange; border-radius:8px;"></video>
   </div>
-</div>
+  <button id="startVideo" style="padding:6px 12px; background:orange; border:none; border-radius:6px; cursor:pointer; color:white;">Start Video</button>
+  <button id="stopVideo" style="padding:6px 12px; background:red; border:none; border-radius:6px; cursor:pointer; color:white; display:none;">Stop Video</button>
+</section>
       <!-- Container for GIF search -->
       <div id="gifContainer" style="display:none; margin-top:10px;">
         <input type="text" id="gifSearch" placeholder="Search GIFs...">
@@ -393,76 +393,28 @@ endCallBtn.onclick = () => {
 </div>
 
 <script>
-  const startVideoBtn = document.getElementById("startVideoBtn");
-  const localVideo = document.getElementById("localVideo");
-  const remoteVideo = document.getElementById("remoteVideo");
+const videoChat = document.getElementById("videoChat");
+const startVideo = document.getElementById("startVideo");
+const stopVideo = document.getElementById("stopVideo");
 
-  let localStream;
-  let pc;
+startVideo.addEventListener("click", async () => {
+  videoChat.style.display = "block";
+  startVideo.style.display = "none";
+  stopVideo.style.display = "inline-block";
 
-  startVideoBtn.addEventListener("click", async () => {
-    // 1. Capture my camera
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
+  // your existing getUserMedia + WebRTC code here
+});
 
-    // 2. Create PeerConnection
-    pc = new RTCPeerConnection();
+stopVideo.addEventListener("click", () => {
+  videoChat.style.display = "none";
+  startVideo.style.display = "inline-block";
+  stopVideo.style.display = "none";
 
-    // 3. Add local stream tracks
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    // 4. Show remote stream
-    pc.ontrack = (event) => {
-      remoteVideo.srcObject = event.streams[0];
-    };
-
-    // 5. Exchange ICE candidates via socket
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", event.candidate);
-      }
-    };
-
-    // 6. Create offer and send it
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("video-offer", offer);
-  });
-
-  // --- Socket listeners ---
-  socket.on("video-offer", async (offer) => {
-    pc = new RTCPeerConnection();
-
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.ontrack = (event) => {
-      remoteVideo.srcObject = event.streams[0];
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", event.candidate);
-      }
-    };
-
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("video-answer", answer);
-  });
-
-  socket.on("video-answer", async (answer) => {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-  });
-
-  socket.on("ice-candidate", async (candidate) => {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-      console.error("Error adding ICE candidate", e);
-    }
-  });
+  // stop video tracks if needed
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+});
 </script>
-</html>
+</body>
+ </html>
