@@ -1,53 +1,37 @@
 const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const bcrypt = require("bcrypt");
-const path = require("path");
-
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
+const path = require("path");
+const bcrypt = require("bcrypt");
+const bodyParser = require("body-parser");
 
-// Middleware
-app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(bodyParser.json());
 
-// In-memory stores (replace with DB later if needed)
-const users = {};   // username -> { passwordHash }
-const groups = ["general"]; // default group
-const bans = new Set(); // usernames that are banned
+// In-memory store
+let users = {};     // { username: passwordHash }
+let groups = ["general"];
+let messages = {};  // { "dm:alice:bob": [...], "group:general": [...] }
 
-// --- Auth routes ---
+// --- Auth ---
 app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
-    return res.json({ success: false, error: "Missing fields" });
-  }
-  if (users[username]) {
-    return res.json({ success: false, error: "User exists" });
-  }
+  if (users[username]) return res.json({ success: false, error: "User exists" });
   const hash = await bcrypt.hash(password, 10);
-  users[username] = { passwordHash: hash };
+  users[username] = hash;
   res.json({ success: true });
 });
 
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  if (bans.has(username)) {
-    return res.json({ success: false, error: "You are banned" });
-  }
-  const user = users[username];
-  if (!user) {
-    return res.json({ success: false, error: "No such user" });
-  }
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) {
-    return res.json({ success: false, error: "Wrong password" });
-  }
+  const hash = users[username];
+  if (!hash) return res.json({ success: false, error: "No such user" });
+  const match = await bcrypt.compare(password, hash);
+  if (!match) return res.json({ success: false, error: "Wrong password" });
   res.json({ success: true, username });
 });
 
-// --- Data routes ---
 app.get("/users", (req, res) => {
   res.json(Object.keys(users));
 });
@@ -58,47 +42,50 @@ app.get("/groups", (req, res) => {
 
 app.post("/groups", (req, res) => {
   const { name } = req.body;
-  if (!name) return res.json({ success: false, error: "Missing name" });
-  if (groups.includes(name)) {
-    return res.json({ success: false, error: "Group exists" });
-  }
+  if (groups.includes(name)) return res.json({ success: false, error: "Group exists" });
   groups.push(name);
   res.json({ success: true });
 });
 
 // --- Socket.IO ---
 io.on("connection", (socket) => {
-socket.on("offer", (offer) => {
-  socket.broadcast.emit("offer", offer);
-});
-
-socket.on("answer", (answer) => {
-  socket.broadcast.emit("answer", answer);
-});
-
-socket.on("ice-candidate", (candidate) => {
-  socket.broadcast.emit("ice-candidate", candidate);
-});
   console.log("a user connected");
 
   socket.on("join dm", ({ me, other }) => {
-    const room = dmRoom(me, other);
+    const room = `dm:${[me, other].sort().join(":")}`;
     socket.join(room);
+    if (!messages[room]) messages[room] = [];
+    socket.emit("chat history", messages[room]);
   });
 
   socket.on("join group", ({ username, group }) => {
-    if (groups.includes(group)) {
-      socket.join(group);
-    }
+    const room = `group:${group}`;
+    socket.join(room);
+    if (!messages[room]) messages[room] = [];
+    socket.emit("chat history", messages[room]);
   });
 
-  socket.on("chat message", (msg) => {
-    if (msg.kind === "dm") {
-      const room = dmRoom(msg.from, msg.to);
-      io.to(room).emit("chat message", msg);
-    } else if (msg.kind === "group") {
-      io.to(msg.to).emit("chat message", msg);
-    }
+  socket.on("chat message", (m) => {
+    const room =
+      m.kind === "dm"
+        ? `dm:${[m.from, m.to].sort().join(":")}`
+        : `group:${m.to}`;
+    if (!messages[room]) messages[room] = [];
+    messages[room].push(m);
+    io.to(room).emit("chat message", m);
+  });
+
+  // --- Video Chat Signaling ---
+  socket.on("video-offer", (offer) => {
+    socket.broadcast.emit("video-offer", offer);
+  });
+
+  socket.on("video-answer", (answer) => {
+    socket.broadcast.emit("video-answer", answer);
+  });
+
+  socket.on("ice-candidate", (candidate) => {
+    socket.broadcast.emit("ice-candidate", candidate);
   });
 
   socket.on("disconnect", () => {
@@ -106,13 +93,8 @@ socket.on("ice-candidate", (candidate) => {
   });
 });
 
-// Helper: stable DM room id
-function dmRoom(a, b) {
-  return [a, b].sort().join("#");
-}
-
-// Start server
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
+http.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
