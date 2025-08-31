@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>Rekkit 🔥</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
@@ -57,10 +57,32 @@
         <ul id="messages"></ul>
       </div>
 
+      <!-- Chat controls -->
       <form id="form" class="composer">
         <input id="input" autocomplete="off" placeholder="Type a message..." />
         <button>Send</button>
       </form>
+<div class="video-chat">
+  <h3>Video Chat</h3>
+  <button id="startCall">Start Call</button>
+  <button id="endCall">End Call</button>
+  <div class="video-container">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+</div>
+      <!-- Container for GIF search -->
+      <div id="gifContainer" style="display:none; margin-top:10px;">
+        <input type="text" id="gifSearch" placeholder="Search GIFs...">
+        <button id="searchGifBtn">Search</button>
+        <div id="gifResults" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"></div>
+      </div>
+
+      <div id="chat-controls">
+        <button id="gifBtn">🎬 GIF</button>
+        <input type="file" id="imageUpload" accept="image/*" style="display:none;">
+        <button id="imageBtn">🖼️ Image</button>
+      </div>
     </section>
   </main>
 
@@ -91,7 +113,7 @@
     const input = document.getElementById("input");
 
     let me = null;
-    let current = { kind: null, id: null }; // { kind: 'dm'|'group', id: 'alice'|'general' }
+    let current = { kind: null, id: null };
 
     // --- auth handlers ---
     btnSignup.onclick = async () => {
@@ -203,7 +225,6 @@
     });
 
     socket.on("chat message", (m) => {
-      // only show if it belongs to the currently open convo
       if (
         (m.kind === "group" && current.kind === "group" && m.to === current.id) ||
         (m.kind === "dm" && current.kind === "dm" &&
@@ -216,14 +237,151 @@
     function addMessage(m) {
       const li = document.createElement("li");
       li.className = m.from === me ? "me" : "other";
-      li.innerHTML = `<strong>${m.from}</strong> ${escapeHtml(m.text)}`;
+      li.innerHTML = `<strong>${m.from}</strong> ${m.text}`;
       messages.appendChild(li);
       messages.scrollTop = messages.scrollHeight;
     }
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
   </script>
+
+  <!-- GIF + Image logic -->
+  <script>
+    const gifBtn = document.getElementById("gifBtn");
+    const gifContainer = document.getElementById("gifContainer");
+    const searchGifBtn = document.getElementById("searchGifBtn");
+    const gifResults = document.getElementById("gifResults");
+    const imageBtn = document.getElementById("imageBtn");
+    const imageUpload = document.getElementById("imageUpload");
+
+    gifBtn.addEventListener("click", () => {
+      gifContainer.style.display = gifContainer.style.display === "none" ? "block" : "none";
+    });
+
+    searchGifBtn.addEventListener("click", async () => {
+      const query = document.getElementById("gifSearch").value;
+      if (!query) return;
+      const apiKey = "dc6zaTOxFJmzC";
+      const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${query}&limit=10`);
+      const data = await res.json();
+      gifResults.innerHTML = "";
+      data.data.forEach(gif => {
+        const img = document.createElement("img");
+        img.src = gif.images.fixed_height_small.url;
+        img.style.cursor = "pointer";
+        img.addEventListener("click", () => {
+          socket.emit("chat message", {
+            kind: current.kind,
+            to: current.id,
+            from: me,
+            text: `<img src="${gif.images.fixed_height.url}" style="max-width:200px;">`
+          });
+          gifContainer.style.display = "none";
+        });
+        gifResults.appendChild(img);
+      });
+    });
+
+    imageBtn.addEventListener("click", () => {
+      imageUpload.click();
+    });
+
+    imageUpload.addEventListener("change", () => {
+      const file = imageUpload.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        socket.emit("chat message", {
+          kind: current.kind,
+          to: current.id,
+          from: me,
+          text: `<img src="${reader.result}" style="max-width:200px;">`
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+<script>
+let localStream;
+let peerConnection;
+
+const startCallBtn = document.getElementById("startCall");
+const endCallBtn = document.getElementById("endCall");
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+
+startCallBtn.onclick = async () => {
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  localVideo.srcObject = localStream;
+
+  peerConnection = new RTCPeerConnection();
+
+  // Add local tracks
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+  // Remote stream
+  peerConnection.ontrack = event => {
+    remoteVideo.srcObject = event.streams[0];
+  };
+
+  // ICE candidates
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", event.candidate);
+    }
+  };
+
+  // Create offer
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit("offer", offer);
+};
+
+// Listen for answer
+socket.on("answer", async (answer) => {
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+// Listen for offer
+socket.on("offer", async (offer) => {
+  peerConnection = new RTCPeerConnection();
+  peerConnection.ontrack = event => {
+    remoteVideo.srcObject = event.streams[0];
+  };
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", event.candidate);
+    }
+  };
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  localVideo.srcObject = localStream;
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  socket.emit("answer", answer);
+});
+
+// ICE candidate exchange
+socket.on("ice-candidate", async (candidate) => {
+  try {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) {
+    console.error("Error adding ICE candidate", e);
+  }
+});
+
+// End call
+endCallBtn.onclick = () => {
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+};
+</script>
 </body>
 </html>
