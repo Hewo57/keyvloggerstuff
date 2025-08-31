@@ -139,4 +139,39 @@ button {
   flex: 1; padding: 10px;
   border: 1px solid #ffd4b3; border-radius: 8px;
 }
+/* Chat list reset */
+#messages {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Base bubble style */
+#messages li {
+  margin: 8px;
+  padding: 10px 15px;
+  border-radius: 20px;
+  max-width: 70%;
+  word-wrap: break-word;
+  font-size: 14px;
+}
+
+/* Your messages (right side, orange bubble) */
+#messages li.me {
+  background: #ff6f3c;   /* bright orange */
+  color: white;
+  align-self: flex-end;
+  margin-left: auto;
+  text-align: right;
+}
+
+/* Other people’s messages (left side, grey bubble) */
+#messages li.other {
+  background: #f1f1f1;   /* light grey */
+  color: #333;
+  align-self: flex-start;
+  margin-right: auto;
+  text-align: left;
+}
 
