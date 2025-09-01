@@ -70,15 +70,6 @@
         <input id="input" autocomplete="off" placeholder="Type a message..." />
         <button>Send</button>
       </form>
-<section id="videoChat" style="display:none; margin-top:20px; text-align:center;">
-  <h3>Video Chat</h3>
-  <div style="display:flex; justify-content:center; gap:10px; margin-bottom:10px;">
-    <video id="localVideo" autoplay playsinline muted style="width:200px; border:2px solid orange; border-radius:8px;"></video>
-    <video id="remoteVideo" autoplay playsinline style="width:200px; border:2px solid orange; border-radius:8px;"></video>
-  </div>
-  <button id="startVideo" style="padding:6px 12px; background:orange; border:none; border-radius:6px; cursor:pointer; color:white;">Start Video</button>
-  <button id="stopVideo" style="padding:6px 12px; background:red; border:none; border-radius:6px; cursor:pointer; color:white; display:none;">Stop Video</button>
-</section>
       <!-- Container for GIF search -->
       <div id="gifContainer" style="display:none; margin-top:10px;">
         <input type="text" id="gifSearch" placeholder="Search GIFs...">
@@ -93,132 +84,14 @@
       </div>
     </section>
   </main>
+   <script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-
-    // UI refs
-    const auth = document.getElementById("auth");
-    const authMsg = document.getElementById("authMsg");
-    const usernameEl = document.getElementById("username");
-    const passwordEl = document.getElementById("password");
-    const btnLogin = document.getElementById("btnLogin");
-    const btnSignup = document.getElementById("btnSignup");
-
-    const app = document.getElementById("app");
-    const meName = document.getElementById("meName");
-    const logout = document.getElementById("logout");
-
-    const dmList = document.getElementById("dmList");
-    const groupList = document.getElementById("groupList");
-    const newGroup = document.getElementById("newGroup");
-    const createGroup = document.getElementById("createGroup");
-
-    const chatTitle = document.getElementById("chatTitle");
-    const messages = document.getElementById("messages");
-    const form = document.getElementById("form");
-    const input = document.getElementById("input");
-
-    let me = null;
-    let current = { kind: null, id: null };
-
-    // --- auth handlers ---
-    btnSignup.onclick = async () => {
-      const r = await fetch("/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      authMsg.textContent = res.success ? "Signup successful! Please log in." : res.error;
-    };
-
-    btnLogin.onclick = async () => {
-      const r = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      if (res.success) {
-        me = res.username;
-        meName.textContent = me;
-        auth.style.display = "none";
-        app.style.display = "grid";
-        await refreshLists();
-      } else {
-        authMsg.textContent = res.error;
-      }
-    };
-
-    logout.onclick = () => {
-      me = null;
-      current = { kind: null, id: null };
-      messages.innerHTML = "";
-      chatTitle.textContent = "Pick a chat";
-      app.style.display = "none";
-      auth.style.display = "block";
-      usernameEl.value = "";
-      passwordEl.value = "";
-      authMsg.textContent = "";
-    };
-
-    // --- lists ---
-    async function refreshLists() {
-      const [users, groups] = await Promise.all([
-        fetch("/users").then(r => r.json()),
-        fetch("/groups").then(r => r.json()),
-      ]);
-
-      dmList.innerHTML = "";
-      users.filter(u => u !== me).forEach(u => {
-        const li = document.createElement("li");
-        li.textContent = u;
-        li.onclick = () => openDM(u);
-        dmList.appendChild(li);
-      });
-
-      groupList.innerHTML = "";
-      groups.forEach(g => {
-        const li = document.createElement("li");
-        li.textContent = g;
-        li.onclick = () => openGroup(g);
-        groupList.appendChild(li);
-      });
-    }
-
-    createGroup.onclick = async () => {
-      const name = newGroup.value.trim().toLowerCase();
-      if (!name) return;
-      const r = await fetch("/groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name })
-      });
-      const res = await r.json();
-      if (res.success) {
-        newGroup.value = "";
-        refreshLists();
-      } else {
-        alert(res.error);
-      }
-    };
-
-    function openDM(other) {
-      current = { kind: "dm", id: other };
-      chatTitle.textContent = `Chat with ${other}`;
-      messages.innerHTML = "";
-      socket.emit("join dm", { me, other });
-    }
-
-    function openGroup(group) {
-      current = { kind: "group", id: group };
-      chatTitle.textContent = `#${group}`;
-      messages.innerHTML = "";
-      socket.emit("join group", { username: me, group });
-    }
-
+  // UI references
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const messages = document.getElementById("messages");
     // --- send / receive ---
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -393,28 +266,35 @@ endCallBtn.onclick = () => {
 </script>
 </body>
 <script>
-const videoChat = document.getElementById("videoChat");
-const startVideo = document.getElementById("startVideo");
-const stopVideo = document.getElementById("stopVideo");
+  const localVideo = document.getElementById("localVideo");
+  const remoteVideo = document.getElementById("remoteVideo");
+  const startVideo = document.getElementById("startVideo");
+  const stopVideo = document.getElementById("stopVideo");
 
-startVideo.addEventListener("click", async () => {
-  videoChat.style.display = "block";
-  startVideo.style.display = "none";
-  stopVideo.style.display = "inline-block";
+  let localStream = null;
 
-  // your existing getUserMedia + WebRTC code here
-});
+  // Start video
+  startVideo.addEventListener("click", async () => {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = localStream;
 
-stopVideo.addEventListener("click", () => {
-  videoChat.style.display = "none";
-  startVideo.style.display = "inline-block";
-  stopVideo.style.display = "none";
+      // TODO: Send stream to other users (via WebRTC)
+      console.log("Local stream started:", localStream);
+    } catch (err) {
+      console.error("Error accessing camera/mic:", err);
+      alert("Please allow camera and microphone access!");
+    }
+  });
 
-  // stop video tracks if needed
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-  }
-});
+  // Stop video
+  stopVideo.addEventListener("click", () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localVideo.srcObject = null;
+      console.log("Local stream stopped");
+    }
+  });
 </script>
 </body>
  </html>
