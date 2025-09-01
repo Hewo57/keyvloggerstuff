@@ -56,6 +56,14 @@
       <div class="chat-box">
         <ul id="messages"></ul>
       </div>
+<div id="videoChat" class="video-area">
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div class="video-controls">
+    <button id="startVideo" type="button">Start Video</button>
+    <button id="stopVideo" type="button" disabled>Stop</button>
+  </div>
+</div>
 
       <!-- Chat controls -->
       <form id="form" class="composer">
@@ -384,14 +392,6 @@ endCallBtn.onclick = () => {
 };
 </script>
 </body>
-<!-- Video Chat -->
-<div id="videoChat" style="margin-top:20px;">
-  <h3>Video Chat</h3>
-  <video id="localVideo" autoplay muted playsinline style="width:200px; border:2px solid orange; border-radius:10px;"></video>
-  <video id="remoteVideo" autoplay playsinline style="width:200px; border:2px solid orange; border-radius:10px;"></video>
-  <button id="startVideoBtn">Start Video</button>
-</div>
-
 <script>
 const videoChat = document.getElementById("videoChat");
 const startVideo = document.getElementById("startVideo");

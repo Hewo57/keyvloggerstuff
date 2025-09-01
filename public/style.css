@@ -174,4 +174,23 @@ button {
   margin-right: auto;
   text-align: left;
 }
+.video-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
 
+.video-area video {
+  width: 120px;
+  height: 90px;
+  background: #000;
+  border: 2px solid orange;
+  border-radius: 8px;
+}
+
+.video-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
