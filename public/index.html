@@ -297,4 +297,96 @@ endCallBtn.onclick = () => {
   });
 </script>
 </body>
+<script>
+  const socket = io();
+  const auth = document.getElementById("auth");
+  const authMsg = document.getElementById("authMsg");
+  const usernameEl = document.getElementById("username");
+  const passwordEl = document.getElementById("password");
+  const signupBtn = document.getElementById("signup");
+  const loginBtn = document.getElementById("login");
+  const logoutBtn = document.getElementById("logout");
+  const app = document.getElementById("app");
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const messages = document.getElementById("messages");
+  const groupsEl = document.getElementById("groups");
+  const newGroup = document.getElementById("newGroup");
+  const createGroup = document.getElementById("createGroup");
+  const chatTitle = document.getElementById("chatTitle");
+
+  let currentId = null;
+  let currentKind = null;
+  let me = null;
+
+  // signup
+  signupBtn.onclick = async () => {
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value.trim();
+    if (!username || !password) return;
+    const res = await fetch("/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return (authMsg.textContent = "Signup failed. Try again.");
+    loginSuccess(data.username);
+  };
+
+  // login
+  loginBtn.onclick = async () => {
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value.trim();
+    if (!username || !password) return;
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return (authMsg.textContent = "Login failed. Try again.");
+    loginSuccess(data.username);
+  };
+
+  function loginSuccess(username) {
+    me = username;
+    auth.style.display = "none";
+    app.style.display = "grid";
+    socket.emit("join", { kind: "group", id: "general" });
+    currentId = "general";
+    currentKind = "group";
+    chatTitle.textContent = "#general";
+  }
+
+  logoutBtn.onclick = () => {
+    location.reload();
+  };
+
+  // send/receive messages
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (input.value && currentId) {
+      socket.emit("chat message", {
+        kind: currentKind,
+        to: currentId,
+        from: me,
+        text: input.value
+      });
+      input.value = "";
+    }
+  });
+
+  socket.on("chat message", (m) => {
+    if (m.kind === currentKind && m.to === currentId) addMessage(m);
+  });
+
+  function addMessage(m) {
+    const item = document.createElement("li");
+    item.className = m.from === me ? "me" : "other";
+    item.innerHTML = `<b>${m.from}</b>: ${m.text}`;
+    messages.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+  }
+</script>
  </html>
