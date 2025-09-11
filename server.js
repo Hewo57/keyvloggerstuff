@@ -1,100 +1,63 @@
-const express = require("express");
+// server.js
+const express = require('express');
+const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
+const bcrypt = require('bcrypt');
+
 const app = express();
-const http = require("http").createServer(app);
-const io = require("socket.io")(http);
-const path = require("path");
-const bcrypt = require("bcrypt");
-const bodyParser = require("body-parser");
+const server = http.createServer(app);
+const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, "public")));
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory store
-let users = {};     // { username: passwordHash }
-let groups = ["general"];
-let messages = {};  // { "dm:alice:bob": [...], "group:general": [...] }
+// (your existing chat data routes / auth should remain here - keep previous Rekkit server code)
+// For brevity I'm focusing on Socket.IO video signaling additions below.
+// Make sure to keep the rest of your chat server routes from your prior server.js.
 
-// --- Auth ---
-app.post("/signup", async (req, res) => {
-  const { username, password } = req.body;
-  if (users[username]) return res.json({ success: false, error: "User exists" });
-  const hash = await bcrypt.hash(password, 10);
-  users[username] = hash;
-  res.json({ success: true });
-});
+io.on('connection', (socket) => {
+  console.log('socket connected', socket.id);
 
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const hash = users[username];
-  if (!hash) return res.json({ success: false, error: "No such user" });
-  const match = await bcrypt.compare(password, hash);
-  if (!match) return res.json({ success: false, error: "Wrong password" });
-  res.json({ success: true, username });
-});
-
-app.get("/users", (req, res) => {
-  res.json(Object.keys(users));
-});
-
-app.get("/groups", (req, res) => {
-  res.json(groups);
-});
-
-app.post("/groups", (req, res) => {
-  const { name } = req.body;
-  if (groups.includes(name)) return res.json({ success: false, error: "Group exists" });
-  groups.push(name);
-  res.json({ success: true });
-});
-
-// --- Socket.IO ---
-io.on("connection", (socket) => {
-  console.log("a user connected");
-
-  socket.on("join dm", ({ me, other }) => {
-    const room = `dm:${[me, other].sort().join(":")}`;
+  // ---------- VIDEO ROOM SIGNALING ----------
+  socket.on('join', ({ room, user }) => {
     socket.join(room);
-    if (!messages[room]) messages[room] = [];
-    socket.emit("chat history", messages[room]);
+    // list other socket ids in the room except self
+    const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
+    const otherIds = clients.filter(id => id !== socket.id);
+
+    // Tell the joining client who else is in the room
+    socket.emit('joined', { otherIds });
+
+    // notify others that this socket joined (optional)
+    // socket.to(room).emit('user-joined', { id: socket.id, user });
   });
 
-  socket.on("join group", ({ username, group }) => {
-    const room = `group:${group}`;
-    socket.join(room);
-    if (!messages[room]) messages[room] = [];
-    socket.emit("chat history", messages[room]);
+  socket.on('leave', ({ room }) => {
+    socket.leave(room);
+    socket.to(room).emit('left', { id: socket.id });
   });
 
-  socket.on("chat message", (m) => {
-    const room =
-      m.kind === "dm"
-        ? `dm:${[m.from, m.to].sort().join(":")}`
-        : `group:${m.to}`;
-    if (!messages[room]) messages[room] = [];
-    messages[room].push(m);
-    io.to(room).emit("chat message", m);
+  // direct relay to specific target
+  socket.on('offer', ({ to, sdp, room }) => {
+    io.to(to).emit('offer', { from: socket.id, sdp });
   });
 
-  // --- Video Chat Signaling ---
-  socket.on("video-offer", (offer) => {
-    socket.broadcast.emit("video-offer", offer);
+  socket.on('answer', ({ to, sdp, room }) => {
+    io.to(to).emit('answer', { from: socket.id, sdp });
   });
 
-  socket.on("video-answer", (answer) => {
-    socket.broadcast.emit("video-answer", answer);
+  socket.on('candidate', ({ to, candidate, room }) => {
+    io.to(to).emit('candidate', { from: socket.id, candidate });
   });
 
-  socket.on("ice-candidate", (candidate) => {
-    socket.broadcast.emit("ice-candidate", candidate);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("a user disconnected");
+  // ---------- (keep your chat events below) ----------
+  socket.on('disconnect', () => {
+    console.log('socket disconnected', socket.id);
   });
 });
 
 const PORT = process.env.PORT || 10000;
-http.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log('Server listening on', PORT));
+
 
