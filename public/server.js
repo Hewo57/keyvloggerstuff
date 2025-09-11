@@ -3,98 +3,85 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 const path = require("path");
-const bcrypt = require("bcrypt");
-const bodyParser = require("body-parser");
 
-app.use(express.static(path.join(__dirname, "public")));
-app.use(bodyParser.json());
+app.use(express.static("public"));
+app.use(express.json());
 
-// In-memory store
-let users = {};     // { username: passwordHash }
+// TEMP database (in-memory)
+let users = {};
 let groups = ["general"];
-let messages = {};  // { "dm:alice:bob": [...], "group:general": [...] }
 
-// --- Auth ---
-app.post("/signup", async (req, res) => {
+// --- Auth Routes ---
+app.post("/signup", (req, res) => {
   const { username, password } = req.body;
-  if (users[username]) return res.json({ success: false, error: "User exists" });
-  const hash = await bcrypt.hash(password, 10);
-  users[username] = hash;
+  if (!username || !password) {
+    return res.json({ success: false, error: "Missing fields" });
+  }
+  if (users[username]) {
+    return res.json({ success: false, error: "User already exists" });
+  }
+  users[username] = { password };
   res.json({ success: true });
 });
 
-app.post("/login", async (req, res) => {
+app.post("/login", (req, res) => {
   const { username, password } = req.body;
-  const hash = users[username];
-  if (!hash) return res.json({ success: false, error: "No such user" });
-  const match = await bcrypt.compare(password, hash);
-  if (!match) return res.json({ success: false, error: "Wrong password" });
+  if (!username || !password) {
+    return res.json({ success: false, error: "Missing fields" });
+  }
+  if (!users[username] || users[username].password !== password) {
+    return res.json({ success: false, error: "Invalid username or password" });
+  }
   res.json({ success: true, username });
 });
 
-app.get("/users", (req, res) => {
-  res.json(Object.keys(users));
-});
-
+// --- Groups ---
 app.get("/groups", (req, res) => {
   res.json(groups);
 });
 
 app.post("/groups", (req, res) => {
   const { name } = req.body;
-  if (groups.includes(name)) return res.json({ success: false, error: "Group exists" });
+  if (!name) return res.json({ success: false, error: "Missing group name" });
+  if (groups.includes(name)) return res.json({ success: false, error: "Group already exists" });
   groups.push(name);
   res.json({ success: true });
 });
 
-// --- Socket.IO ---
-io.on("connection", (socket) => {
-  console.log("a user connected");
+// --- Users ---
+app.get("/users", (req, res) => {
+  res.json(Object.keys(users));
+});
 
-  socket.on("join dm", ({ me, other }) => {
-    const room = `dm:${[me, other].sort().join(":")}`;
-    socket.join(room);
-    if (!messages[room]) messages[room] = [];
-    socket.emit("chat history", messages[room]);
-  });
+// --- Sockets ---
+io.on("connection", (socket) => {
+  console.log("User connected");
 
   socket.on("join group", ({ username, group }) => {
-    const room = `group:${group}`;
+    socket.join(group);
+  });
+
+  socket.on("join dm", ({ me, other }) => {
+    const room = [me, other].sort().join("-");
     socket.join(room);
-    if (!messages[room]) messages[room] = [];
-    socket.emit("chat history", messages[room]);
   });
 
-  socket.on("chat message", (m) => {
-    const room =
-      m.kind === "dm"
-        ? `dm:${[m.from, m.to].sort().join(":")}`
-        : `group:${m.to}`;
-    if (!messages[room]) messages[room] = [];
-    messages[room].push(m);
-    io.to(room).emit("chat message", m);
-  });
-
-  // --- Video Chat Signaling ---
-  socket.on("video-offer", (offer) => {
-    socket.broadcast.emit("video-offer", offer);
-  });
-
-  socket.on("video-answer", (answer) => {
-    socket.broadcast.emit("video-answer", answer);
-  });
-
-  socket.on("ice-candidate", (candidate) => {
-    socket.broadcast.emit("ice-candidate", candidate);
+  socket.on("chat message", (msg) => {
+    if (msg.kind === "group") {
+      io.to(msg.to).emit("chat message", msg);
+    } else if (msg.kind === "dm") {
+      const room = [msg.from, msg.to].sort().join("-");
+      io.to(room).emit("chat message", msg);
+    }
   });
 
   socket.on("disconnect", () => {
-    console.log("a user disconnected");
+    console.log("User disconnected");
   });
 });
 
-const PORT = process.env.PORT || 10000;
-http.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+// --- Run ---
+const PORT = 3000;
+http.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
 
