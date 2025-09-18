@@ -7,7 +7,7 @@ const path = require("path");
 app.use(express.static("public"));
 app.use(express.json());
 
-// In-memory "database"
+// TEMP database (in-memory)
 let users = {};
 let groups = ["general"];
 
@@ -55,9 +55,8 @@ app.get("/users", (req, res) => {
 
 // --- Socket.IO ---
 io.on("connection", (socket) => {
-  console.log("🔌 User connected:", socket.id);
+  console.log("User connected");
 
-  // Chat messages
   socket.on("join group", ({ username, group }) => {
     socket.join(group);
   });
@@ -76,40 +75,14 @@ io.on("connection", (socket) => {
     }
   });
 
-  // --- WebRTC signaling ---
-  socket.on("join", ({ room, user }) => {
-    socket.join(room);
-    const others = Array.from(io.sockets.adapter.rooms.get(room) || []);
-    const otherIds = others.filter(id => id !== socket.id);
-    socket.emit("joined", { otherIds });
-  });
-
-  socket.on("offer", ({ to, sdp, room }) => {
-    io.to(to).emit("offer", { from: socket.id, sdp });
-  });
-
-  socket.on("answer", ({ to, sdp, room }) => {
-    io.to(to).emit("answer", { from: socket.id, sdp });
-  });
-
-  socket.on("candidate", ({ to, candidate, room }) => {
-    io.to(to).emit("candidate", { from: socket.id, candidate });
-  });
-
-  socket.on("leave", ({ room }) => {
-    socket.leave(room);
-    io.to(room).emit("left", { id: socket.id });
-  });
-
   socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id);
+    console.log("User disconnected");
   });
 });
 
 // --- Run ---
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
-;
+http.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 
 
 
