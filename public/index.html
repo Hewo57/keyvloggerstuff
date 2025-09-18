@@ -1,15 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Rekkit 🔥</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1 id="rekTitle">Rekkit 🔥</h1>
-    <button id="videoChatBtn" style="float:right; margin-right:15px;">📹 Video Chat</button>
+    <h1>Rekkit 🔥</h1>
   </header>
 
   <!-- AUTH -->
@@ -53,89 +52,344 @@
       <div class="chat-header">
         <h2 id="chatTitle">Pick a chat</h2>
       </div>
+
       <div class="chat-box">
         <ul id="messages"></ul>
       </div>
+<div id="videoChat" class="video-area">
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div class="video-controls">
+    <button id="startVideo" type="button">Start Video</button>
+    <button id="stopVideo" type="button" disabled>Stop</button>
+  </div>
+</div>
+
+      <!-- Chat controls -->
       <form id="form" class="composer">
         <input id="input" autocomplete="off" placeholder="Type a message..." />
         <button>Send</button>
       </form>
+      <!-- Container for GIF search -->
+      <div id="gifContainer" style="display:none; margin-top:10px;">
+        <input type="text" id="gifSearch" placeholder="Search GIFs...">
+        <button id="searchGifBtn">Search</button>
+        <div id="gifResults" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"></div>
+      </div>
+
+      <div id="chat-controls">
+        <button id="gifBtn">🎬 GIF</button>
+        <input type="file" id="imageUpload" accept="image/*" style="display:none;">
+        <button id="imageBtn">🖼️ Image</button>
+      </div>
     </section>
   </main>
+   <script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
 
-  <!-- Easter Egg video (hidden by default) -->
-  <video id="easterEgg" src="stickbug.mp4" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999;" loop></video>
+  // UI references
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const messages = document.getElementById("messages");
+    // --- send / receive ---
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!input.value || !current.kind) return;
+      socket.emit("chat message", {
+        kind: current.kind,
+        to: current.id,
+        from: me,
+        text: input.value
+      });
+      input.value = "";
+    });
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-
-    // Easter Egg trigger for Baka
-    const rekTitle = document.getElementById("rekTitle");
-    const easterEgg = document.getElementById("easterEgg");
-    let me = null;
-
-    rekTitle.addEventListener("click", () => {
-      if (me === "baka") {
-        easterEgg.style.display = "block";
-        easterEgg.play();
+    socket.on("chat message", (m) => {
+      if (
+        (m.kind === "group" && current.kind === "group" && m.to === current.id) ||
+        (m.kind === "dm" && current.kind === "dm" &&
+          ((m.from === me && m.to === current.id) || (m.from === current.id && m.to === me)))
+      ) {
+        addMessage(m);
       }
     });
 
-    // video chat button
-    document.getElementById("videoChatBtn").onclick = () => {
-      if (!me) return alert("Login first!");
-      window.open(`/video.html?room=${Date.now()}&user=${me}`, "_blank");
-    };
-
-    // Auth logic
-    const auth = document.getElementById("auth");
-    const authMsg = document.getElementById("authMsg");
-    const usernameEl = document.getElementById("username");
-    const passwordEl = document.getElementById("password");
-    const btnLogin = document.getElementById("btnLogin");
-    const btnSignup = document.getElementById("btnSignup");
-    const app = document.getElementById("app");
-    const meName = document.getElementById("meName");
-    const logout = document.getElementById("logout");
-
-    btnSignup.onclick = async () => {
-      const r = await fetch("/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      authMsg.textContent = res.success ? "Signup successful! Please log in." : res.error;
-    };
-
-    btnLogin.onclick = async () => {
-      const r = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameEl.value.trim(), password: passwordEl.value })
-      });
-      const res = await r.json();
-      if (res.success) {
-        me = res.username;
-        meName.textContent = me;
-        auth.style.display = "none";
-        app.style.display = "grid";
-      } else {
-        authMsg.textContent = res.error;
-      }
-    };
-
-    logout.onclick = () => {
-      me = null;
-      app.style.display = "none";
-      auth.style.display = "block";
-      usernameEl.value = "";
-      passwordEl.value = "";
-      authMsg.textContent = "";
-    };
+    function addMessage(m) {
+      const li = document.createElement("li");
+      li.className = m.from === me ? "me" : "other";
+      li.innerHTML = `<strong>${m.from}</strong> ${m.text}`;
+      messages.appendChild(li);
+      messages.scrollTop = messages.scrollHeight;
+    }
   </script>
+
+  <!-- GIF + Image logic -->
+  <script>
+    const gifBtn = document.getElementById("gifBtn");
+    const gifContainer = document.getElementById("gifContainer");
+    const searchGifBtn = document.getElementById("searchGifBtn");
+    const gifResults = document.getElementById("gifResults");
+    const imageBtn = document.getElementById("imageBtn");
+    const imageUpload = document.getElementById("imageUpload");
+
+    gifBtn.addEventListener("click", () => {
+      gifContainer.style.display = gifContainer.style.display === "none" ? "block" : "none";
+    });
+
+    searchGifBtn.addEventListener("click", async () => {
+      const query = document.getElementById("gifSearch").value;
+      if (!query) return;
+      const apiKey = "dc6zaTOxFJmzC";
+      const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${query}&limit=10`);
+      const data = await res.json();
+      gifResults.innerHTML = "";
+      data.data.forEach(gif => {
+        const img = document.createElement("img");
+        img.src = gif.images.fixed_height_small.url;
+        img.style.cursor = "pointer";
+        img.addEventListener("click", () => {
+          socket.emit("chat message", {
+            kind: current.kind,
+            to: current.id,
+            from: me,
+            text: `<img src="${gif.images.fixed_height.url}" style="max-width:200px;">`
+          });
+          gifContainer.style.display = "none";
+        });
+        gifResults.appendChild(img);
+      });
+    });
+
+    imageBtn.addEventListener("click", () => {
+      imageUpload.click();
+    });
+
+    imageUpload.addEventListener("change", () => {
+      const file = imageUpload.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        socket.emit("chat message", {
+          kind: current.kind,
+          to: current.id,
+          from: me,
+          text: `<img src="${reader.result}" style="max-width:200px;">`
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+<script>
+let localStream;
+let peerConnection;
+
+const startCallBtn = document.getElementById("startCall");
+const endCallBtn = document.getElementById("endCall");
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+
+startCallBtn.onclick = async () => {
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  localVideo.srcObject = localStream;
+
+  peerConnection = new RTCPeerConnection();
+
+  // Add local tracks
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+  // Remote stream
+  peerConnection.ontrack = event => {
+    remoteVideo.srcObject = event.streams[0];
+  };
+
+  // ICE candidates
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", event.candidate);
+    }
+  };
+
+  // Create offer
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit("offer", offer);
+};
+
+// Listen for answer
+socket.on("answer", async (answer) => {
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+// Listen for offer
+socket.on("offer", async (offer) => {
+  peerConnection = new RTCPeerConnection();
+  peerConnection.ontrack = event => {
+    remoteVideo.srcObject = event.streams[0];
+  };
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", event.candidate);
+    }
+  };
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  localVideo.srcObject = localStream;
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  socket.emit("answer", answer);
+});
+
+// ICE candidate exchange
+socket.on("ice-candidate", async (candidate) => {
+  try {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) {
+    console.error("Error adding ICE candidate", e);
+  }
+});
+
+// End call
+endCallBtn.onclick = () => {
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+};
+</script>
 </body>
-</html>
+<script>
+  const localVideo = document.getElementById("localVideo");
+  const remoteVideo = document.getElementById("remoteVideo");
+  const startVideo = document.getElementById("startVideo");
+  const stopVideo = document.getElementById("stopVideo");
+
+  let localStream = null;
+
+  // Start video
+  startVideo.addEventListener("click", async () => {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = localStream;
+
+      // TODO: Send stream to other users (via WebRTC)
+      console.log("Local stream started:", localStream);
+    } catch (err) {
+      console.error("Error accessing camera/mic:", err);
+      alert("Please allow camera and microphone access!");
+    }
+  });
+
+  // Stop video
+  stopVideo.addEventListener("click", () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localVideo.srcObject = null;
+      console.log("Local stream stopped");
+    }
+  });
+</script>
+</body>
+<script>
+  const socket = io();
+  const auth = document.getElementById("auth");
+  const authMsg = document.getElementById("authMsg");
+  const usernameEl = document.getElementById("username");
+  const passwordEl = document.getElementById("password");
+  const signupBtn = document.getElementById("signup");
+  const loginBtn = document.getElementById("login");
+  const logoutBtn = document.getElementById("logout");
+  const app = document.getElementById("app");
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const messages = document.getElementById("messages");
+  const groupsEl = document.getElementById("groups");
+  const newGroup = document.getElementById("newGroup");
+  const createGroup = document.getElementById("createGroup");
+  const chatTitle = document.getElementById("chatTitle");
+
+  let currentId = null;
+  let currentKind = null;
+  let me = null;
+
+  // signup
+  signupBtn.onclick = async () => {
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value.trim();
+    if (!username || !password) return;
+    const res = await fetch("/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return (authMsg.textContent = "Signup failed. Try again.");
+    loginSuccess(data.username);
+  };
+
+  // login
+  loginBtn.onclick = async () => {
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value.trim();
+    if (!username || !password) return;
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return (authMsg.textContent = "Login failed. Try again.");
+    loginSuccess(data.username);
+  };
+
+  function loginSuccess(username) {
+    me = username;
+    auth.style.display = "none";
+    app.style.display = "grid";
+    socket.emit("join", { kind: "group", id: "general" });
+    currentId = "general";
+    currentKind = "group";
+    chatTitle.textContent = "#general";
+  }
+
+  logoutBtn.onclick = () => {
+    location.reload();
+  };
+
+  // send/receive messages
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (input.value && currentId) {
+      socket.emit("chat message", {
+        kind: currentKind,
+        to: currentId,
+        from: me,
+        text: input.value
+      });
+      input.value = "";
+    }
+  });
+
+  socket.on("chat message", (m) => {
+    if (m.kind === currentKind && m.to === currentId) addMessage(m);
+  });
+
+  function addMessage(m) {
+    const item = document.createElement("li");
+    item.className = m.from === me ? "me" : "other";
+    item.innerHTML = `<b>${m.from}</b>: ${m.text}`;
+    messages.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+  }
+</script>
+ </html>
+
 
 
