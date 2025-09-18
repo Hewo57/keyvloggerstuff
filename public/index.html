@@ -1,14 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Rekkit 🔥</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    #videoBtn {
+      float: right;
+      background: #ff6600;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #rickroll {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: black;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    #rickroll video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
 </head>
 <body>
   <header class="app-header">
-    <h1>Rekkit 🔥</h1>
+    <h1 id="rekTitle">Rekkit 🔥</h1>
   </header>
 
   <!-- AUTH -->
@@ -49,11 +76,9 @@
 
     <!-- Chat pane -->
     <section class="chat">
-      <div class="chat-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="chat-header">
         <h2 id="chatTitle">Pick a chat</h2>
-        <button id="videoCallBtn" title="Open video call" style="background:#ff6600;color:#fff;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;">
-          📹 Video Call
-        </button>
+        <button id="videoBtn">📹 Video</button>
       </div>
 
       <div class="chat-box">
@@ -67,20 +92,27 @@
     </section>
   </main>
 
+  <!-- Hidden Easter Egg -->
+  <div id="rickroll">
+    <video autoplay loop>
+      <source src="stickbug.mp4" type="video/mp4">
+    </video>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
+    let me = null;
 
-    // UI refs
     const auth = document.getElementById("auth");
+    const app = document.getElementById("app");
+    const meName = document.getElementById("meName");
     const authMsg = document.getElementById("authMsg");
+
     const usernameEl = document.getElementById("username");
     const passwordEl = document.getElementById("password");
     const btnLogin = document.getElementById("btnLogin");
     const btnSignup = document.getElementById("btnSignup");
-
-    const app = document.getElementById("app");
-    const meName = document.getElementById("meName");
     const logout = document.getElementById("logout");
 
     const dmList = document.getElementById("dmList");
@@ -93,12 +125,12 @@
     const form = document.getElementById("form");
     const input = document.getElementById("input");
 
-    const videoCallBtn = document.getElementById("videoCallBtn");
+    const rekTitle = document.getElementById("rekTitle");
+    const rickroll = document.getElementById("rickroll");
 
-    let me = null;
     let current = { kind: null, id: null };
 
-    // --- auth handlers ---
+    // AUTH
     btnSignup.onclick = async () => {
       const r = await fetch("/signup", {
         method: "POST",
@@ -139,13 +171,12 @@
       authMsg.textContent = "";
     };
 
-    // --- lists ---
+    // LISTS
     async function refreshLists() {
       const [users, groups] = await Promise.all([
         fetch("/users").then(r => r.json()),
         fetch("/groups").then(r => r.json()),
       ]);
-
       dmList.innerHTML = "";
       users.filter(u => u !== me).forEach(u => {
         const li = document.createElement("li");
@@ -194,7 +225,7 @@
       socket.emit("join group", { username: me, group });
     }
 
-    // --- send / receive ---
+    // CHAT
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       if (!input.value || !current.kind) return;
@@ -229,17 +260,23 @@
       return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    // --- video call ---
-    videoCallBtn.addEventListener("click", () => {
-      if (!me || !current.kind) {
-        alert("Please select a chat first.");
+    // VIDEO CHAT
+    document.getElementById("videoBtn").onclick = () => {
+      if (!current.kind || !current.id) {
+        alert("Pick a chat first!");
         return;
       }
-      const room = current.kind === "dm"
-        ? `dm-${me}-${current.id}`
-        : `group-${current.id}`;
-      window.open(`/video.html?room=${encodeURIComponent(room)}&user=${encodeURIComponent(me)}`, "_blank");
-    });
+      const room = current.kind + "-" + current.id;
+      window.open(`/video.html?room=${room}&user=${me}`, "_blank");
+    };
+
+    // SECRET Easter Egg
+    rekTitle.onclick = () => {
+      if (me === "baka") {
+        rickroll.style.display = "flex";
+      }
+    };
   </script>
 </body>
 </html>
+
